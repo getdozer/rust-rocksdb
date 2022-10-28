@@ -14,12 +14,9 @@
 //
 
 use std::{marker::PhantomData, ptr};
+use std::sync::Arc;
 
-use crate::{
-    db::{convert_values, DBAccess},
-    ffi, AsColumnFamilyRef, DBIteratorWithThreadMode, DBPinnableSlice, DBRawIteratorWithThreadMode,
-    Direction, Error, IteratorMode, ReadOptions, SnapshotWithThreadMode, WriteBatchWithTransaction,
-};
+use crate::{db::{convert_values, DBAccess}, ffi, AsColumnFamilyRef, DBIteratorWithThreadMode, DBPinnableSlice, DBRawIteratorWithThreadMode, Direction, Error, IteratorMode, ReadOptions, SnapshotWithThreadMode, WriteBatchWithTransaction, DB};
 use libc::{c_char, c_void, size_t};
 
 /// RocksDB Transaction.
@@ -28,14 +25,15 @@ use libc::{c_char, c_void, size_t};
 ///
 /// [`TransactionDB`]: crate::TransactionDB
 /// [`OptimisticTransactionDB`]: crate::OptimisticTransactionDB
-pub struct Transaction<'db, DB> {
-    pub(crate) inner: *mut ffi::rocksdb_transaction_t,
-    pub(crate) _marker: PhantomData<&'db DB>,
+pub struct Transaction {
+    pub(crate) inner: *mut ffi::rocksdb_transaction_t
 }
 
-unsafe impl<'db, DB> Send for Transaction<'db, DB> {}
+unsafe impl Send for Transaction {}
+unsafe impl Sync for Transaction {}
 
-impl<'db, DB> DBAccess for Transaction<'db, DB> {
+
+impl DBAccess for Transaction {
     unsafe fn create_snapshot(&self) -> *const ffi::rocksdb_snapshot_t {
         ffi::rocksdb_transaction_get_snapshot(self.inner)
     }
@@ -116,7 +114,7 @@ impl<'db, DB> DBAccess for Transaction<'db, DB> {
     }
 }
 
-impl<'db, DB> Transaction<'db, DB> {
+impl Transaction {
     /// Write all batched keys to the DB atomically.
     ///
     /// May return any error that could be returned by `DB::write`.
@@ -138,7 +136,7 @@ impl<'db, DB> Transaction<'db, DB> {
     /// [`Busy`]: crate::ErrorKind::Busy
     /// [`TryAgain`]: crate::ErrorKind::TryAgain
     /// [`Options::set_max_write_buffer_size_to_maintain`]: crate::Options::set_max_write_buffer_size_to_maintain
-    pub fn commit(self) -> Result<(), Error> {
+    pub fn commit(&self) -> Result<(), Error> {
         unsafe {
             ffi_try!(ffi::rocksdb_transaction_commit(self.inner));
         }
@@ -872,7 +870,7 @@ impl<'db, DB> Transaction<'db, DB> {
     }
 }
 
-impl<'db, DB> Drop for Transaction<'db, DB> {
+impl Drop for Transaction {
     fn drop(&mut self) {
         unsafe {
             ffi::rocksdb_transaction_destroy(self.inner);

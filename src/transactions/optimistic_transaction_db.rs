@@ -13,15 +13,12 @@
 // limitations under the License.
 //
 
-use std::{collections::BTreeMap, ffi::CString, fs, iter, marker::PhantomData, path::Path, ptr};
+use std::{collections::BTreeMap, ffi::CString, fs, iter, marker::PhantomData, path::Path, ptr, thread};
+use std::sync::{Arc, Mutex};
 
 use libc::{c_char, c_int};
 
-use crate::{
-    db::DBCommon, db::DBInner, ffi, ffi_util::to_cpath, write_batch::WriteBatchWithTransaction,
-    ColumnFamilyDescriptor, Error, OptimisticTransactionOptions, Options, ThreadMode, Transaction,
-    WriteOptions, DEFAULT_COLUMN_FAMILY_NAME,
-};
+use crate::{db::DBCommon, db::DBInner, ffi, ffi_util::to_cpath, write_batch::WriteBatchWithTransaction, ColumnFamilyDescriptor, Error, OptimisticTransactionOptions, Options, ThreadMode, Transaction, WriteOptions, DEFAULT_COLUMN_FAMILY_NAME, SingleThreaded};
 
 /// A type alias to RocksDB Optimistic Transaction DB.
 ///
@@ -241,7 +238,7 @@ impl<T: ThreadMode> OptimisticTransactionDB<T> {
     }
 
     /// Creates a transaction with default options.
-    pub fn transaction(&self) -> Transaction<Self> {
+    pub fn transaction(&self) -> Transaction {
         self.transaction_opt(
             &WriteOptions::default(),
             &OptimisticTransactionOptions::default(),
@@ -253,7 +250,8 @@ impl<T: ThreadMode> OptimisticTransactionDB<T> {
         &self,
         writeopts: &WriteOptions,
         otxn_opts: &OptimisticTransactionOptions,
-    ) -> Transaction<Self> {
+    ) -> Transaction {
+
         Transaction {
             inner: unsafe {
                 ffi::rocksdb_optimistictransaction_begin(
@@ -262,8 +260,7 @@ impl<T: ThreadMode> OptimisticTransactionDB<T> {
                     otxn_opts.inner,
                     std::ptr::null_mut(),
                 )
-            },
-            _marker: PhantomData::default(),
+            }
         }
     }
 
@@ -291,4 +288,54 @@ impl<T: ThreadMode> OptimisticTransactionDB<T> {
         wo.disable_wal(true);
         self.write_opt(batch, &wo)
     }
+}
+
+#[test]
+fn test() {
+
+    let mut opts = Options::default();
+    opts.set_allow_mmap_writes(true);
+    opts.optimize_for_point_lookup(1024 * 1024 * 1024);
+    opts.set_bytes_per_sync(1024 * 1024 * 100);
+    opts.set_manual_wal_flush(true);
+    opts.create_if_missing(true);
+    opts.set_allow_mmap_reads(true);
+
+    let db: OptimisticTransactionDB<SingleThreaded> =
+        OptimisticTransactionDB::open(&opts, "./test_data").unwrap();
+    let db = Arc::new(db);
+
+    // let tx = Arc::new(Mutex::new(db.transaction()));
+    // let tx_c = tx.clone();
+    //
+    // let t1_tx = tx.clone();
+    // let t1 = thread::spawn(move || {
+    //     t1_tx.lock().unwrap().put("a".as_bytes(), "a".as_bytes());
+    // });
+    //
+    // let t2_tx = tx.clone();
+    // let t2 = thread::spawn(move || {
+    //     t2_tx.lock().unwrap().put("b".as_bytes(), "b".as_bytes());
+    // });
+    //
+    // t1.join();
+    // t2.join();
+    //
+    // let unlocked = tx_c.lock().unwrap();
+    //
+    // let r = unlocked.commit();
+    //
+    // let g = db.get("a".as_bytes()).unwrap();
+    // let f = db.get("b".as_bytes()).unwrap();
+    //
+    // println!("dd");
+
+
+    for i in 1..1_000_000_u64 {
+        let tx = db.transaction();
+        tx.put(i.to_le_bytes(), i.to_le_bytes());
+        tx.commit();
+    }
+
+
 }

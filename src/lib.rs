@@ -267,7 +267,7 @@ mod test {
         is_send::<EnvWrapper>();
         is_send::<TransactionDB>();
         is_send::<OptimisticTransactionDB>();
-        is_send::<Transaction<'_, TransactionDB>>();
+        is_send::<Transaction>();
         is_send::<TransactionDBOptions>();
         is_send::<OptimisticTransactionOptions>();
         is_send::<TransactionOptions>();

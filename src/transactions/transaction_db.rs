@@ -393,16 +393,16 @@ impl<T: ThreadMode> TransactionDB<T> {
     }
 
     /// Creates a transaction with default options.
-    pub fn transaction(&self) -> Transaction<Self> {
+    pub fn transaction(&self) -> Transaction {
         self.transaction_opt(&WriteOptions::default(), &TransactionOptions::default())
     }
 
     /// Creates a transaction with options.
-    pub fn transaction_opt<'a>(
-        &'a self,
+    pub fn transaction_opt(
+        &self,
         write_opts: &WriteOptions,
         txn_opts: &TransactionOptions,
-    ) -> Transaction<'a, Self> {
+    ) -> Transaction{
         Transaction {
             inner: unsafe {
                 ffi::rocksdb_transaction_begin(
@@ -411,8 +411,7 @@ impl<T: ThreadMode> TransactionDB<T> {
                     txn_opts.inner,
                     std::ptr::null_mut(),
                 )
-            },
-            _marker: PhantomData::default(),
+            }
         }
     }
 
@@ -420,14 +419,13 @@ impl<T: ThreadMode> TransactionDB<T> {
     ///
     /// This function is expected to call once after open database.
     /// User should commit or rollback all transactions before start other transactions.
-    pub fn prepared_transactions(&self) -> Vec<Transaction<Self>> {
+    pub fn prepared_transactions(&self) -> Vec<Transaction> {
         self.prepared
             .lock()
             .unwrap()
             .drain(0..)
             .map(|inner| Transaction {
-                inner,
-                _marker: PhantomData::default(),
+                inner
             })
             .collect()
     }
